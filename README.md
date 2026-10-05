@@ -4,7 +4,7 @@
 
 **Until we turn to dust, (ﾐゝᆽ╹ﾐ)**
 
-**[hiraeth-dev.github.io](https://hiraeth-dev.github.io/)**
+**[viyoga.github.io](https://viyoga.github.io/)**
 
 A retro-terminal personal site — novels, notes, and a handful of in-browser tools.
 Static HTML, no tracking, and every tool runs client-side.
@@ -25,12 +25,12 @@ your browser.
 
 | Tool | What it does |
 |---|---|
-| [**dict**](https://hiraeth-dev.github.io/dictionary/) | Word lookup — 23 Wiktionary editions, fuzzy matching, pronunciation |
-| [**studio**](https://hiraeth-dev.github.io/studio/) | Compress / convert / resize images, PDFs and documents — see below |
-| [**walldiff**](https://hiraeth-dev.github.io/walldiff/) | Recolour a wallpaper from 35+ palettes (gowall engine) |
-| [**typing**](https://hiraeth-dev.github.io/typing/) | Speed test — time & word modes, live WPM/accuracy, speed-progression graph |
+| [**dict**](https://viyoga.github.io/dictionary/) | Word lookup — 23 Wiktionary editions, fuzzy matching, pronunciation |
+| [**studio**](https://viyoga.github.io/studio/) | Compress / convert / resize images, PDFs and documents — see below |
+| [**walldiff**](https://viyoga.github.io/walldiff/) | Recolour a wallpaper from 35+ palettes (gowall engine) |
+| [**typing**](https://viyoga.github.io/typing/) | Speed test — time & word modes, live WPM/accuracy, speed-progression graph |
 
-Also linked from the homepage: an [abeyant](https://hiraeth-dev.github.io/abeyant/)
+Also linked from the homepage: an [abeyant](https://viyoga.github.io/abeyant/)
 new-tab extension, plus desktop and mobile startpage projects.
 
 ### studio, in detail
