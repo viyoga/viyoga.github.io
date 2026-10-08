@@ -452,7 +452,7 @@ nav.top {
   max-width: 100%;
   box-sizing: border-box;
   padding: 6px 24px;
-  background: var(--glass-bg);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--sat, 155%));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--sat, 155%));
   border-bottom: 1px solid var(--border);
@@ -466,7 +466,7 @@ nav.top .logo {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: lowercase;
-  background: var(--glass-bg);
+  background: color-mix(in srgb, var(--bg-panel-alt) 80%, transparent);
   border: 1px solid var(--border);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 var(--glass-hi);
   padding: 4px 12px 4px 8px;

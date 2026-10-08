@@ -60,7 +60,6 @@ Novels, chapter by chapter:
 |---|---|
 | Reverend Insanity | 2,261 |
 | Lord of the Mysteries | 1,446 |
-| Mushoku Tensei | 385 (26 volumes) |
 | Brothers Karamazov | 110 |
 | Pride and Prejudice | 62 |
 | Moby Dick | 61 |
