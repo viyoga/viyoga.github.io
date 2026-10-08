@@ -1,6 +1,6 @@
 <div align="center">
 
-# Hiraeth
+# Viyoga
 
 **Until we turn to dust, (ﾐゝᆽ╹ﾐ)**
 

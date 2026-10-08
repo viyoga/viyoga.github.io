@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  // hiraeth serves this as static/js/grid.js behind a #grid-canvas element
+  // viyoga serves this as static/js/grid.js behind a #grid-canvas element
   // (the extension uses #bg-canvas) — accept either.
   const c = document.getElementById('grid-canvas') || document.getElementById('bg-canvas');
   if (!c) return;
@@ -20,7 +20,7 @@
   const DAMP = 0.88;
   const SPRING = 0.04;
 
-  // hiraeth defines both --canvas-* and --grid-* vars (same values);
+  // viyoga defines both --canvas-* and --grid-* vars (same values);
   // prefer --canvas-* to match the extension, fall back to --grid-*.
   function getColors() {
     const cs = getComputedStyle(document.documentElement);
@@ -46,7 +46,7 @@
   // (custom props keep the keyword as-is: 'transparent', not rgba.)
   let fadeSolid = !isTransparent(clr.fade);
   let live = false;
-  // hiraeth's theme switcher dispatches this; re-read vars when it fires.
+  // viyoga's theme switcher dispatches this; re-read vars when it fires.
   document.addEventListener('themechange', () => {
     clr = getColors();
     dotRgba = parseRgba(clr.dot);

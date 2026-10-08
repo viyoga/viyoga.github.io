@@ -24,7 +24,7 @@
 
       <form id="dict-form" class="dict-search">
         <span class="dict-prompt">></span>
-        <input type="text" id="dict-input" class="dict-input" value="hiraeth" autocomplete="off" autofocus>
+        <input type="text" id="dict-input" class="dict-input" value="viyoga" autocomplete="off" autofocus>
         <button type="submit" class="dict-submit">↵</button>
       </form>
 
@@ -100,7 +100,7 @@
 
   var dictCache = {};
   try {
-    var saved = sessionStorage.getItem('hiraeth_dict_cache');
+    var saved = sessionStorage.getItem('viyoga_dict_cache');
     if (saved) dictCache = JSON.parse(saved);
   } catch (e) {}
 
@@ -109,7 +109,7 @@
       dictCache[word] = entry;
       var keys = Object.keys(dictCache);
       if (keys.length > 80) delete dictCache[keys[0]];
-      sessionStorage.setItem('hiraeth_dict_cache', JSON.stringify(dictCache));
+      sessionStorage.setItem('viyoga_dict_cache', JSON.stringify(dictCache));
     } catch (e) {}
   }
 
@@ -391,9 +391,9 @@
     doLookup(word);
   });
 
-  // Pre-loaded showcase: "hiraeth" is already typed; show its entry at once.
-  input.value = 'hiraeth';
-  doLookup('hiraeth');
+  // Pre-loaded showcase: "viyoga" is already typed; show its entry at once.
+  input.value = 'viyoga';
+  doLookup('viyoga');
 })();
 </script>
 {% endblock content %}

@@ -46,7 +46,7 @@
   const STORAGE_VERSION = 4;
 
   const DEFAULT_SHORTCUTS = [
-    { name: 'Hiraeth', url: 'https://viyoga.github.io' },
+    { name: 'Viyoga', url: 'https://viyoga.github.io' },
     { name: 'Proton', url: 'https://mail.proton.me' },
     { name: 'Drive', url: 'https://drive.google.com' },
     { name: 'Gmail', url: 'https://mail.google.com' },
@@ -152,11 +152,11 @@
     return new Promise((resolve) => {
       const finish = (cache) => {
         faviconCache = cache || {};
-        // One-time cache refresh for Hiraeth to pick up new logo
-        const hiraethKey = 'https://viyoga.github.io';
-        if (!faviconCache._hiraethRefreshedV2) {
-          delete faviconCache[hiraethKey];
-          faviconCache._hiraethRefreshedV2 = true;
+        // One-time cache refresh for Viyoga to pick up new logo
+        const viyogaKey = 'https://viyoga.github.io';
+        if (!faviconCache._viyogaRefreshedV2) {
+          delete faviconCache[viyogaKey];
+          faviconCache._viyogaRefreshedV2 = true;
           saveFaviconCache();
         }
         resolve();

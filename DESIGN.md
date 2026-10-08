@@ -1,4 +1,4 @@
-# Hiraeth Design System
+# Viyoga Design System
 
 Single source of truth for how the site looks. Update this file when the
 visual system changes — future edits (human or agent) follow it.
