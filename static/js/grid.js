@@ -15,8 +15,8 @@
   let mx = -9999, my = -9999, lmx = -9999, lmy = -9999;
   let pts = [];
   const SPACING = 55;
-  const RADIUS = 120;
-  const STRENGTH = 0.4;
+  const RADIUS = 180;
+  const STRENGTH = 0.22;
   const DAMP = 0.88;
   const SPRING = 0.04;
 
@@ -140,16 +140,15 @@
       const dist = Math.sqrt(dx * dx + dy * dy);
       let t = 0;
       if (dist < RADIUS) t = 1 - dist / RADIUS;
-      const glow = t * t * 1.12;
+      const glow = t * t * 0.85;
       // blink only affects the hover glow, not the base grid
-      const blink = 0.88 + 0.12 * Math.sin(now * p.flick + p.phase);
+      const blink = 0.90 + 0.10 * Math.sin(now * p.flick + p.phase);
       if (glow > 0.02) {
-        const outer = 1.5 + 8 + glow * 16;
+        const outer = 2 + 5 + glow * 10;
         const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, outer);
-        const ga = (0.16 + glow * 0.36) * blink;
+        const ga = (0.09 + glow * 0.22) * blink;
         grad.addColorStop(0, `rgba(${dotRgba.r},${dotRgba.g},${dotRgba.b},${ga})`);
-        grad.addColorStop(0.24, `rgba(${dotRgba.r},${dotRgba.g},${dotRgba.b},${ga * 0.38})`);
-        grad.addColorStop(0.6, `rgba(${dotRgba.r},${dotRgba.g},${dotRgba.b},${glow * 0.10 * blink})`);
+        grad.addColorStop(0.35, `rgba(${dotRgba.r},${dotRgba.g},${dotRgba.b},${ga * 0.35})`);
         grad.addColorStop(1, `rgba(${dotRgba.r},${dotRgba.g},${dotRgba.b},0)`);
         ctx.globalCompositeOperation = 'lighter';
         ctx.fillStyle = grad;
@@ -158,9 +157,9 @@
         ctx.fill();
         ctx.globalCompositeOperation = 'source-over';
         // brightened core on hover
-        ctx.fillStyle = `rgba(${dotRgba.r},${dotRgba.g},${dotRgba.b},${dotRgba.a + glow * 0.5 * blink})`;
+        ctx.fillStyle = `rgba(${dotRgba.r},${dotRgba.g},${dotRgba.b},${dotRgba.a + glow * 0.35 * blink})`;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 1.5 + glow * 2.0, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 1.5 + glow * 1.2, 0, Math.PI * 2);
         ctx.fill();
       } else {
         // original grid dot — untouched

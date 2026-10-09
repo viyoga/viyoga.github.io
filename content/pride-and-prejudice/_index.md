@@ -3,6 +3,8 @@ title = "Pride and Prejudice"
 sort_by = "weight"
 render = true
 [extra]
-book_number = 10
+book_number = 11
+author = "Jane Austen"
+year = "1813"
 summary = "It is a truth universally acknowledged, that a single man in possession of a good fortune must be in want of a wife"
 +++
