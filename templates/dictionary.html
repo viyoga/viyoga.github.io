@@ -148,34 +148,22 @@
       });
   }
 
-  // case-insensitive lookup: check cache, then walk candidate spellings until one hits
+  // case-insensitive lookup: check cache, then multi-tier hybrid engine
   function lookup(word, controller) {
     var key = word.trim().toLowerCase();
     if (dictCache[key]) {
       return Promise.resolve(dictCache[key]);
     }
-    var candidates = DictEngine.lookupCandidates(word);
-    var i = 0;
 
-    function attempt() {
-      if (i >= candidates.length) {
-        var nf = new Error('no entry for "' + word + '"');
-        nf.notFound = true;
-        throw nf;
+    return DictEngine.lookup(word, currentLang()).then(function(res) {
+      if (res && res.ok && res.entry) {
+        saveCache(key, res.entry);
+        return res.entry;
       }
-      return fetchExtract(candidates[i++], controller).then(function(raw) {
-        var res = DictEngine.parseResponse(raw, currentLang());
-        if (res.ok) {
-          saveCache(key, res.entry);
-          return res.entry;
-        }
-        // try next spelling on misses; real failures bubble up
-        if (res.kind === 'notfound' || res.kind === 'empty') return attempt();
-        throw new Error(res.error || 'lookup failed');
-      });
-    }
-
-    return Promise.resolve().then(attempt);
+      var nf = new Error(res && res.error ? res.error : 'no entry for "' + word + '"');
+      nf.notFound = true;
+      throw nf;
+    });
   }
 
   function loadWordlist() {
@@ -199,33 +187,34 @@
   }
 
   function renderNotFoundWithSuggestions(word) {
-    var fuzzy = DictEngine.fuzzyMatch(word);
-    if (fuzzy.autoMatch) {
-      output.innerHTML = '<p class="dict-status"><span class="live-dot"></span> did you mean “'
-        + escapeHTML(fuzzy.autoMatch) + '”? looking that up…</p>';
-      doLookup(fuzzy.autoMatch, output.innerHTML);
-      return;
-    }
-    if (fuzzy.alternatives.length) {
-      var html = '<div class="dict-mock">'
-        + '<p class="dict-jab">not found. did you mean:</p>'
-        + '<p class="dict-chips">';
-      for (var i = 0; i < fuzzy.alternatives.length; i++) {
-        html += '<button type="button" class="dict-chip" data-word="'
-          + escapeHTML(fuzzy.alternatives[i]) + '">' + escapeHTML(fuzzy.alternatives[i]) + '</button>';
+    DictEngine.suggest(word).then(function(fuzzy) {
+      if (fuzzy && fuzzy.autoMatch) {
+        output.innerHTML = '<p class="dict-status"><span class="live-dot"></span> did you mean “'
+          + escapeHTML(fuzzy.autoMatch) + '”? looking that up…</p>';
+        doLookup(fuzzy.autoMatch, output.innerHTML);
+        return;
       }
-      html += '</p><button class="dict-retry">try again ↵</button></div>';
-      output.innerHTML = html;
-      var chips = output.querySelectorAll('.dict-chip');
-      for (var c = 0; c < chips.length; c++) {
-        chips[c].addEventListener('click', function() {
-          doLookup(this.getAttribute('data-word'), false);
-        });
+      if (fuzzy && fuzzy.alternatives && fuzzy.alternatives.length) {
+        var html = '<div class="dict-mock">'
+          + '<p class="dict-jab">not found. did you mean:</p>'
+          + '<p class="dict-chips">';
+        for (var i = 0; i < fuzzy.alternatives.length; i++) {
+          html += '<button type="button" class="dict-chip" data-word="'
+            + escapeHTML(fuzzy.alternatives[i]) + '">' + escapeHTML(fuzzy.alternatives[i]) + '</button>';
+        }
+        html += '</p><button class="dict-retry">try again ↵</button></div>';
+        output.innerHTML = html;
+        var chips = output.querySelectorAll('.dict-chip');
+        for (var c = 0; c < chips.length; c++) {
+          chips[c].addEventListener('click', function() {
+            doLookup(this.getAttribute('data-word'), false);
+          });
+        }
+        bindRetry();
+        return;
       }
-      bindRetry();
-      return;
-    }
-    renderNotFound();
+      renderNotFound();
+    }).catch(renderNotFound);
   }
 
   function renderNotFound() {
@@ -276,21 +265,41 @@
         if (def.example) {
           html += '<p class="dict-example">“' + escapeHTML(def.example) + '”</p>';
         }
+        if (def.translation) {
+          html += '<p class="dict-example dict-trans">→ ' + escapeHTML(def.translation) + '</p>';
+        }
+      }
+
+      if (meaning.synonyms && meaning.synonyms.length) {
+        html += '<div class="dict-syns"><span class="dict-syn-lbl">SYN:</span> ';
+        for (var s = 0; s < Math.min(6, meaning.synonyms.length); s++) {
+          html += '<span class="dict-syn-tag">' + escapeHTML(meaning.synonyms[s]) + '</span> ';
+        }
+        html += '</div>';
+      }
+
+      if (meaning.antonyms && meaning.antonyms.length) {
+        html += '<div class="dict-syns"><span class="dict-syn-lbl">ANT:</span> ';
+        for (var a = 0; a < Math.min(6, meaning.antonyms.length); a++) {
+          html += '<span class="dict-ant-tag">' + escapeHTML(meaning.antonyms[a]) + '</span> ';
+        }
+        html += '</div>';
       }
 
       html += '</div>';
     }
 
+    if (entry.source) {
+      html += '<div class="dict-source-badge">(' + escapeHTML(entry.source) + ')</div>';
+    }
+
     html += '</div>';
     output.innerHTML = html;
 
-    attachAudioButton(entry.word);
+    attachAudioButton(entry.word, entry.audioUrl);
   }
 
-  function attachAudioButton(word) {
-    // Wiktionary extracts carry no audio, and gstatic has no CORS headers,
-    // so pronunciation is generated lazily on click via tts.ai (Kokoro,
-    // consistent voice, full CORS), falling back to gstatic's US recording.
+  function attachAudioButton(word, audioUrl) {
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'dict-audio';
@@ -303,30 +312,36 @@
       busy = true;
       btn.innerHTML = '…';
 
-      fetch('https://api.tts.ai/v1/tts/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'kokoro', text: word, voice: 'af_bella', format: 'mp3' })
-      })
-        .then(function(r) {
-          if (!r.ok) throw new Error('tts status ' + r.status);
-          return r.json();
-        })
-        .then(function(data) {
-          var url = data && data.result_url;
-          if (!url) throw new Error('no result_url');
-          return new Audio(url).play();
-        })
-        .catch(function() {
-          var gs = 'https://ssl.gstatic.com/dictionary/static/sounds/20200429/'
-            + encodeURIComponent(word) + '--_us_1.mp3';
-          return new Audio(gs).play();
-        })
-        .catch(function() {})
-        .then(function() {
-          btn.innerHTML = '&#9658;';
-          busy = false;
+      function done() {
+        btn.innerHTML = '&#9658;';
+        busy = false;
+      }
+
+      function fallbackAudio() {
+        var gs = 'https://ssl.gstatic.com/dictionary/static/sounds/20200429/'
+          + encodeURIComponent(word.toLowerCase()) + '--_us_1.mp3';
+        var ga = new Audio(gs);
+        ga.play().then(done).catch(function() {
+          fetch('https://api.tts.ai/v1/tts/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'kokoro', text: word, voice: 'af_bella', format: 'mp3' })
+          })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data && data.result_url) return new Audio(data.result_url).play();
+            })
+            .catch(function() {})
+            .then(done);
         });
+      }
+
+      if (audioUrl) {
+        var a = new Audio(audioUrl);
+        a.play().then(done).catch(fallbackAudio);
+      } else {
+        fallbackAudio();
+      }
     });
 
     var row = output.querySelector('.dict-word-row');

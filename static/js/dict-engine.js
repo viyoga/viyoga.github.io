@@ -1,15 +1,16 @@
-// Wiktionary lookup engine — ported from tristonarmstrong/omarchy-dictionary
-// (Model.js, MIT). Pure data + URL building + response parsing — no DOM, no
-// fetch. The page script owns the network call and rendering. The fuzzy
-// matcher needs its wordlist injected via setWordlist() (see dict-wordlist.js,
-// loaded lazily only when a lookup misses).
+// dict-engine.js — Hybrid Dictionary & Pronunciation Engine
+// Built for dict-cli & viyoga.github.io. Zero dependencies.
+// Works seamlessly in both Node.js and modern Web Browsers.
+// Sources:
+//   1. Free Dictionary API (rich phonetics, direct audio, synonyms/antonyms)
+//   2. Wikimedia REST API (official, ultra-reliable definitions & examples, zero citation clutter)
+//   3. Wikimedia Commons & MediaWiki API (IPA phonetics, audio pronunciations)
+//   4. Datamuse API + offline wordlist (fuzzy did-you-mean suggestions)
+
 (function(global) {
   'use strict';
 
   // ---- Languages ----
-  // `wikiName` is the heading each Wiktionary edition uses for its own
-  // language section (e.g. "English" on en.wikt, "日本語" on ja.wikt). The
-  // parser matches against it, so it must match Wiktionary's section title.
   var LANGUAGES = [
     { value: "ar", label: "Arabic",     wikiName: "Arabic" },
     { value: "bn", label: "Bengali",    wikiName: "Bengali" },
@@ -43,18 +44,96 @@
     var l = LANG_BY_VALUE[String(value || "en").toLowerCase()];
     return l ? l.label : String(value || "en");
   }
+
   function langWikiName(value) {
     var l = LANG_BY_VALUE[String(value || "en").toLowerCase()];
     return l ? l.wikiName : "English";
   }
 
   function defaultLanguage() { return "en"; }
-
   function languages() { return LANGUAGES.slice(); }
 
-  // ---- API layer ----
-  // MediaWiki extracts endpoint: plain text with ==/===/==== section markers
-  // preserved — that structure is what the parser below walks.
+  // Case-handling: walk candidate spellings (Time -> time, Time; norway -> norway, Norway)
+  function lookupCandidates(word) {
+    var w = String(word || "").trim();
+    var out = [];
+    function push(v) {
+      if (v && v !== "" && out.indexOf(v) === -1) out.push(v);
+    }
+    if (w === "") return out;
+    push(w.toLowerCase());
+    push(w);
+    push(w.charAt(0).toUpperCase() + w.slice(1));
+    push(w.charAt(0).toLowerCase() + w.slice(1));
+    return out;
+  }
+
+  // Priority ranking for parts of speech so main lexical categories come first
+  var POS_PRIORITY = {
+    noun: 10,
+    verb: 9,
+    adjective: 8,
+    adj: 8,
+    adverb: 7,
+    adv: 7,
+    pronoun: 6,
+    preposition: 5,
+    conjunction: 4,
+    interjection: 3,
+    idiom: 2,
+    phrase: 2,
+    proverb: 2
+  };
+
+  // ---- HTML & Text Utilities ----
+  function unescapeHtml(str) {
+    if (!str) return "";
+    return str
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, "\"")
+      .replace(/&#039;/g, "'")
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&#160;/g, " ")
+      .replace(/&mdash;/g, "—")
+      .replace(/&ndash;/g, "–")
+      .replace(/&#(\d+);/g, function(match, dec) {
+        return String.fromCharCode(dec);
+      });
+  }
+
+  function cleanHtml(html) {
+    if (!html) return "";
+    var s = String(html)
+      // strip nested child lists from parent definition
+      .replace(/<[ou]l[\s\S]*$/i, "")
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<span class="[^"]*maintenance[^"]*"[^>]*>[\s\S]*?<\/span>/gi, "")
+      .replace(/<span class="[^"]*usage-label-sense[^"]*"[^>]*>[\s\S]*?<\/span>/gi, "")
+      .replace(/<span class="citation[^"]*"[^>]*>[\s\S]*?<\/span>/gi, "")
+      .replace(/<[^>]+>/g, "");
+    return unescapeHtml(s).replace(/\s+/g, " ").trim();
+  }
+
+  function stringList(value) {
+    if (!Array.isArray(value)) return [];
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < value.length; i++) {
+      var s = String(value[i] || "").trim();
+      if (s && !seen[s.toLowerCase()]) {
+        seen[s.toLowerCase()] = true;
+        out.push(s);
+      }
+    }
+    return out;
+  }
+
+  // ---- URL Builders ----
   function apiBase(langCode) {
     var code = String(langCode || defaultLanguage()).trim().toLowerCase() || defaultLanguage();
     return "https://" + code + ".wiktionary.org/w/api.php?origin=*&action=query&prop=extracts&explaintext=1&format=json&titles=";
@@ -66,188 +145,287 @@
     return apiBase(langCode) + encodeURIComponent(w);
   }
 
-  // ---- Case handling (mirrors dictd/CLI behaviour) ----
-  // Wiktionary titles are case-sensitive (wgCapitalLinks=false): "time" and
-  // "Time" are different entries, and "norway" doesn't exist ("Norway" does).
-  // A dictionary should treat them as the same word, so lookups walk an
-  // ordered candidate list — common word first, proper noun last:
-  //   "Time"   -> ["time", "Time"]
-  //   "Build"  -> ["build", "Build"]
-  //   "norway" -> ["norway", "Norway"]
-  //   "iPhone" -> ["iphone", "iPhone", "IPhone"]  (mid-word caps preserved)
-  function lookupCandidates(word) {
-    var w = String(word || "").trim();
-    var out = [];
-    function push(v) {
-      if (v && v !== "" && out.indexOf(v) === -1) out.push(v);
-    }
-    if (w === "") return out;
-    push(w.toLowerCase());      // common-word form wins (Time == time)
-    push(w);                    // exactly as typed
-    push(w.charAt(0).toUpperCase() + w.slice(1));  // proper noun fallback
-    push(w.charAt(0).toLowerCase() + w.slice(1));  // …and the reverse
-    return out;
-  }
-
-  // ---- Response parsing & normalisation ----
-  function parseResponse(raw, langCode) {
-    var text = String(raw || "").trim();
-    if (text === "") {
-      return { ok: false, kind: "empty", error: "empty response" };
-    }
-    var data = null;
+  // ---- Network Fetch with Timeout (Isomorphic: Browser + Node) ----
+  async function fetchWithTimeout(url, timeoutMs) {
+    var ac = new AbortController();
+    var t = setTimeout(function() { ac.abort(); }, timeoutMs || 3500);
     try {
-      data = JSON.parse(text);
-    } catch (e) {
-      return { ok: false, kind: "invalid", error: "could not parse response" };
-    }
-    if (!data || typeof data !== "object") {
-      return { ok: false, kind: "invalid", error: "could not parse response" };
-    }
-
-    if (data.query && data.query.pages && typeof data.query.pages === "object") {
-      var pages = data.query.pages;
-      var pageIds = Object.keys(pages);
-      if (pageIds.length === 0) {
-        return { ok: false, kind: "empty", error: "no entry returned" };
-      }
-      var page = pages[pageIds[0]];
-      if (!page || page.missing !== undefined) {
-        return {
-          ok: false,
-          kind: "notfound",
-          error: "no entry for \"" + (page && page.title ? page.title : "word") + "\""
+      var options = { signal: ac.signal };
+      // Only set User-Agent in Node.js (setting User-Agent in browser fetch is forbidden)
+      if (typeof window === 'undefined') {
+        options.headers = {
+          'User-Agent': 'dict-cli/2.0 (terminal dictionary tool; https://github.com/viyoga/dict-cli)'
         };
       }
-      var extract = page.extract != null ? String(page.extract).trim() : "";
-      if (extract === "") {
-        return { ok: false, kind: "empty", error: "no extract returned" };
-      }
-      var entry = normalizeEntry(page, langCode);
-      if (!entry) return { ok: false, kind: "empty", error: "no entry returned" };
-      return { ok: true, entry: entry, variants: pageIds.length };
+      var res = await fetch(url, options);
+      return res;
+    } finally {
+      clearTimeout(t);
     }
+  }
 
-    // Legacy Free Dictionary shapes, kept so rollback is trivial.
-    if (!Array.isArray(data) && data.title && data.message) {
+  // ---- Tier 1: Free Dictionary API ----
+  async function lookupFreeDictionary(word) {
+    try {
+      var res = await fetchWithTimeout("https://api.dictionaryapi.dev/api/v2/entries/en/" + encodeURIComponent(word), 3000);
+      if (!res.ok) return null;
+      var text = await res.text();
+      var data;
+      try { data = JSON.parse(text); } catch (e) { return null; }
+      if (!Array.isArray(data) || !data.length || !data[0].meanings || !data[0].meanings.length) return null;
+
+      var item = data[0];
+      var phonetic = String(item.phonetic || "").trim();
+      var audioUrl = "";
+
+      if (Array.isArray(item.phonetics)) {
+        for (var i = 0; i < item.phonetics.length; i++) {
+          var p = item.phonetics[i];
+          if (!p) continue;
+          if (!phonetic && p.text && String(p.text).trim()) {
+            phonetic = String(p.text).trim();
+          }
+          if (!audioUrl && p.audio && String(p.audio).trim()) {
+            audioUrl = String(p.audio).trim();
+          }
+        }
+      }
+
+      var meaningsMap = {};
+      for (var j = 0; j < item.meanings.length; j++) {
+        var m = item.meanings[j];
+        if (!m || !m.partOfSpeech) continue;
+        var pos = String(m.partOfSpeech).toLowerCase().trim();
+        if (!meaningsMap[pos]) {
+          meaningsMap[pos] = {
+            partOfSpeech: pos,
+            definitions: [],
+            synonyms: [],
+            antonyms: []
+          };
+        }
+        var target = meaningsMap[pos];
+        if (Array.isArray(m.synonyms)) target.synonyms.push.apply(target.synonyms, m.synonyms);
+        if (Array.isArray(m.antonyms)) target.antonyms.push.apply(target.antonyms, m.antonyms);
+
+        if (Array.isArray(m.definitions)) {
+          for (var k = 0; k < m.definitions.length; k++) {
+            var d = m.definitions[k];
+            if (!d || !d.definition) continue;
+            var defText = cleanHtml(d.definition);
+            if (!defText) continue;
+            var exText = d.example ? cleanHtml(d.example) : "";
+            var syns = stringList(d.synonyms);
+            var ants = stringList(d.antonyms);
+            if (syns.length) target.synonyms.push.apply(target.synonyms, syns);
+            if (ants.length) target.antonyms.push.apply(target.antonyms, ants);
+
+            if (!target.definitions.some(function(x) { return x.definition === defText; })) {
+              target.definitions.push({
+                definition: defText,
+                example: exText,
+                synonyms: syns,
+                antonyms: ants
+              });
+            }
+          }
+        }
+      }
+
+      var meanings = Object.values(meaningsMap).filter(function(m) {
+        m.synonyms = stringList(m.synonyms);
+        m.antonyms = stringList(m.antonyms);
+        return m.definitions.length > 0;
+      });
+
+      if (!meanings.length) return null;
+
+      meanings.sort(function(a, b) {
+        var pA = POS_PRIORITY[a.partOfSpeech] || 0;
+        var pB = POS_PRIORITY[b.partOfSpeech] || 0;
+        return pB - pA;
+      });
+
       return {
-        ok: false,
-        kind: "notfound",
-        error: String(data.message),
-        hint: data.resolution ? String(data.resolution) : ""
+        word: String(item.word || word).trim(),
+        phonetic: phonetic,
+        audioUrl: audioUrl,
+        source: "Free Dictionary",
+        language: "en",
+        meanings: meanings
       };
+    } catch (e) {
+      return null;
     }
-    if (!Array.isArray(data) || data.length === 0) {
-      return { ok: false, kind: "empty", error: "no entry returned" };
-    }
-
-    var legacyEntry = normalizeEntry(data[0], langCode);
-    if (!legacyEntry) return { ok: false, kind: "empty", error: "no entry returned" };
-    return { ok: true, entry: legacyEntry, variants: data.length };
   }
 
-  function normalizeEntry(raw, langCode) {
-    if (!raw || typeof raw !== "object") return null;
+  // ---- Tier 2: Wikimedia REST API (Official Wiktionary Definition Endpoint) ----
+  async function lookupWiktionaryRest(word, langCode) {
+    try {
+      var code = String(langCode || defaultLanguage()).toLowerCase().trim();
+      var url = "https://en.wiktionary.org/api/rest_v1/page/definition/" + encodeURIComponent(word);
+      var res = await fetchWithTimeout(url, 4000);
+      if (!res.ok) return null;
+      var data = await res.json();
+      if (!data || typeof data !== "object") return null;
 
-    if (raw.extract != null) {
-      var word = String(raw.title || "").trim();
-      if (word === "") return null;
-      return parseWiktionaryWikitext(word, raw.extract, langCode);
-    }
+      var sections = data[code];
+      // If requested language not found in English Wiktionary, check if it's English or fallback to first available language (e.g. Swahili for 'viyoga')
+      if ((!sections || !sections.length) && code === "en") {
+        sections = data.en || Object.values(data)[0];
+      }
+      if (!sections || !sections.length) return null;
 
-    var fword = String(raw.word || "").trim();
-    if (fword === "") return null;
+      var meaningsMap = {};
 
-    var phonetic = String(raw.phonetic || "").trim();
-    if (phonetic === "" && Array.isArray(raw.phonetics)) {
-      for (var i = 0; i < raw.phonetics.length; i++) {
-        var p = raw.phonetics[i];
-        if (p && typeof p === "object" && p.text) {
-          phonetic = String(p.text).trim();
-          if (phonetic !== "") break;
+      for (var i = 0; i < sections.length; i++) {
+        var sec = sections[i];
+        if (!sec || !sec.partOfSpeech) continue;
+        var pos = String(sec.partOfSpeech).toLowerCase().trim();
+        if (!meaningsMap[pos]) {
+          meaningsMap[pos] = {
+            partOfSpeech: pos,
+            definitions: [],
+            synonyms: [],
+            antonyms: []
+          };
+        }
+        var target = meaningsMap[pos];
+
+        if (Array.isArray(sec.definitions)) {
+          for (var j = 0; j < sec.definitions.length; j++) {
+            var item = sec.definitions[j];
+            if (!item || !item.definition) continue;
+
+            var defText = cleanHtml(item.definition);
+            if (!defText || defText.length < 2) continue;
+
+            // Pick up first clean example
+            var exText = "";
+            var transText = "";
+            if (Array.isArray(item.parsedExamples) && item.parsedExamples.length) {
+              var pe = item.parsedExamples[0];
+              if (pe.example) exText = cleanHtml(pe.example);
+              if (pe.translation) transText = cleanHtml(pe.translation);
+            } else if (Array.isArray(item.examples) && item.examples.length) {
+              exText = cleanHtml(item.examples[0]);
+            }
+
+            if (!target.definitions.some(function(x) { return x.definition === defText; })) {
+              target.definitions.push({
+                definition: defText,
+                example: exText,
+                translation: transText,
+                synonyms: [],
+                antonyms: []
+              });
+            }
+          }
         }
       }
-    }
 
-    var audioUrl = "";
-    if (Array.isArray(raw.phonetics)) {
-      for (var j = 0; j < raw.phonetics.length; j++) {
-        var ph = raw.phonetics[j];
-        if (ph && typeof ph === "object" && ph.audio && String(ph.audio).trim() !== "") {
-          audioUrl = String(ph.audio).trim();
-          break;
+      var meanings = Object.values(meaningsMap).filter(function(m) {
+        return m.definitions.length > 0;
+      });
+
+      if (!meanings.length) return null;
+
+      meanings.sort(function(a, b) {
+        var pA = POS_PRIORITY[a.partOfSpeech] || 0;
+        var pB = POS_PRIORITY[b.partOfSpeech] || 0;
+        return pB - pA;
+      });
+
+      return {
+        word: word,
+        phonetic: "",
+        audioUrl: "",
+        source: "Wiktionary",
+        language: code,
+        meanings: meanings
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ---- Tier 3: Wiktionary Metadata (IPA + Audio Extraction) ----
+  async function enrichWiktionaryMetadata(entry, word, langCode) {
+    if (!entry) return entry;
+    if (entry.phonetic && entry.audioUrl) return entry;
+
+    try {
+      var code = (langCode === "en" || !langCode) ? "en" : langCode;
+      var url = "https://" + code + ".wiktionary.org/w/api.php?action=query&titles=" +
+        encodeURIComponent(word) + "&prop=extracts|images&explaintext=1&format=json&origin=*";
+      var res = await fetchWithTimeout(url, 3000);
+      if (!res.ok) return entry;
+      var data = await res.json();
+      if (!data || !data.query || !data.query.pages) return entry;
+
+      var page = Object.values(data.query.pages)[0];
+      if (!page) return entry;
+
+      // 1. Extract IPA if missing
+      if (!entry.phonetic && page.extract) {
+        var extract = page.extract;
+        var m1 = /IPA[^:\n]*:\s*\/([^\n/]+)\//.exec(extract);
+        if (m1) {
+          entry.phonetic = "/" + m1[1].trim() + "/";
+        } else {
+          var m2 = /IPA[^:\n]*:\s*\[([^\n\]]+)\]/.exec(extract);
+          if (m2) {
+            entry.phonetic = "[" + m2[1].trim() + "]";
+          } else {
+            var m3 = /\/([^\n/]{2,35})\//.exec(extract);
+            if (m3 && !/^(?:and|the|or|of)$/i.test(m3[1])) {
+              entry.phonetic = "/" + m3[1].trim() + "/";
+            }
+          }
+        }
+
+        // Also check if we can pick up any synonyms/antonyms from extract if empty
+        var hasSyns = entry.meanings.some(function(m) { return m.synonyms.length > 0; });
+        if (!hasSyns) {
+          var synMatch = /==== Synonyms ====([^=]+)/i.exec(extract);
+          if (synMatch) {
+            var synLines = synMatch[1].split("\n");
+            var foundSyns = [];
+            for (var s = 0; s < synLines.length; s++) {
+              var sLine = synLines[s].replace(/^\([^)]+\):?/, "").replace(/^[*#:\-\s]+/, "").trim();
+              if (sLine && !/^(see also|thesaurus)/i.test(sLine) && sLine.length < 30) {
+                foundSyns.push(sLine);
+              }
+            }
+            if (foundSyns.length && entry.meanings[0]) {
+              entry.meanings[0].synonyms = stringList(foundSyns).slice(0, 8);
+            }
+          }
         }
       }
-    }
 
-    var meanings = [];
-    if (Array.isArray(raw.meanings)) {
-      for (var k = 0; k < raw.meanings.length; k++) {
-        var m = normalizeMeaning(raw.meanings[k]);
-        if (m) meanings.push(m);
+      // 2. Extract Pronunciation Audio from Commons if missing
+      if (!entry.audioUrl && Array.isArray(page.images)) {
+        var audioImg = page.images.find(function(img) {
+          return /\.(ogg|oga|mp3|wav|flac)$/i.test(img.title) &&
+                 new RegExp(code, "i").test(img.title);
+        }) || page.images.find(function(img) {
+          return /\.(ogg|oga|mp3|wav|flac)$/i.test(img.title);
+        });
+
+        if (audioImg) {
+          var fn = audioImg.title.replace(/^File:/i, "").trim();
+          entry.audioUrl = "https://commons.wikimedia.org/wiki/Special:FilePath/" + encodeURIComponent(fn);
+        }
       }
+    } catch (e) {
+      /* metadata enrichment is non-critical */
     }
 
-    if (meanings.length === 0) return null;
-
-    return {
-      word: fword,
-      phonetic: phonetic,
-      audioUrl: audioUrl,
-      source: "dictionaryapi",
-      meanings: meanings
-    };
+    return entry;
   }
 
-  function normalizeMeaning(raw) {
-    if (!raw || typeof raw !== "object") return null;
-    var pos = String(raw.partOfSpeech || "").trim();
-    if (pos === "") return null;
-
-    var defs = [];
-    if (Array.isArray(raw.definitions)) {
-      for (var i = 0; i < raw.definitions.length; i++) {
-        var d = normalizeDefinition(raw.definitions[i]);
-        if (d) defs.push(d);
-      }
-    }
-
-    if (defs.length === 0) return null;
-
-    return {
-      partOfSpeech: pos,
-      definitions: defs,
-      synonyms: stringList(raw.synonyms),
-      antonyms: stringList(raw.antonyms)
-    };
-  }
-
-  function normalizeDefinition(raw) {
-    if (!raw || typeof raw !== "object") return null;
-    var text = String(raw.definition || "").trim();
-    if (text === "") return null;
-    return {
-      definition: text,
-      example: raw.example ? String(raw.example).trim() : "",
-      synonyms: stringList(raw.synonyms),
-      antonyms: stringList(raw.antonyms)
-    };
-  }
-
-  function stringList(value) {
-    if (!Array.isArray(value)) return [];
-    var out = [];
-    for (var i = 0; i < value.length; i++) {
-      var s = String(value[i] || "").trim();
-      if (s !== "") out.push(s);
-    }
-    return out;
-  }
-
-  // ---- Wiktionary extract parser ----
-  // Turns "== Lang == / === POS ==== / defs…" plain text into structured
-  // { word, phonetic, source, language, meanings[] } entries.
-
+  // ---- Tier 4: Native Language Wiktionary Fallback Parser ----
   function parseSections(text) {
     text = String(text || "").replace(/\r\n/g, "\n").replace(/^\uFEFF/, "");
     var root = { level: 1, title: "", body: "", children: [] };
@@ -269,323 +447,252 @@
     return root.children;
   }
 
-  function stripInlineHeaders(text) {
-    return String(text || "").replace(/^={2,}[^\n=].{0,80}?={2,}\s*$/gm, "").trim();
-  }
-
-  var WIKT_POS_KEYS = {
-    noun: 1, verb: 1, adjective: 1, adj: 1, adverb: 1, adv: 1,
-    pronoun: 1, preposition: 1, postposition: 1, particle: 1,
-    interjection: 1, conjunction: 1, determiner: 1, article: 1,
-    numeral: 1, contraction: 1, letter: 1, symbol: 1, initialism: 1,
-    prefix: 1, suffix: 1, infix: 1, circumfix: 1, "combining form": 1,
-    phrase: 1, idiom: 1, proverb: 1, clause: 1, predicative: 1,
-    "auxiliary verb": 1, "modal verb": 1, "proper noun": 1, name: 1,
-    ordinal: 1, cardinal: 1, gerund: 1, participle: 1, infinitive: 1
-  };
-  var WIKT_SKIP_DROP = {
-    translations: 1, "derived terms": 1, "related terms": 1,
-    descendants: 1, references: 1, "further reading": 1,
-    anagrams: 1, conjugation: 1, declension: 1, inflection: 1,
-    "see also": 1, "external links": 1, quotations: 1,
-    homophones: 1, hyponyms: 1, hypernyms: 1,
-    meronyms: 1, holonyms: 1, troponyms: 1,
-    "coordinate terms": 1, "alternative forms": 1,
-    synonyms: 1, antonyms: 1, "usage notes": 1
-  };
-
-  function wiktCanonicalPos(t) {
-    if (t === "adj") return "adjective";
-    if (t === "adv") return "adverb";
-    if (t === "auxiliary verb" || t === "modal verb" || t === "gerund" ||
-        t === "participle" || t === "infinitive") return "verb";
-    if (t === "proper noun" || t === "name") return "noun";
-    return t;
-  }
-
-  function wiktExtractIpa(body) {
-    var m = /IPA[^:\n]*:\s*\/([^\n/]+)\//.exec(body);
-    if (m) return "/" + m[1] + "/";
-    var m2 = /IPA[^:\n]*:\s*\[([^\n\]]+)\]/.exec(body);
-    if (m2) return "[" + m2[1] + "]";
-    return "";
-  }
-
-  function wiktIsInflectionLine(line, headword) {
-    if (!line || line.indexOf("(") < 0) return false;
-    var openIdx = line.indexOf("(");
-    var closeIdx = line.lastIndexOf(")");
-    if (openIdx < 0 || closeIdx < 0 || closeIdx !== line.length - 1) return false;
-    var head = line.substring(0, openIdx).trim().toLowerCase();
-    var annot = line.substring(openIdx + 1, closeIdx);
-    if (!head || !annot) return false;
-    var heads = head.split(/[,\s]+/).filter(Boolean);
-    if (!heads.length) return null;
-    var hw = String(headword || "").trim().toLowerCase();
-    var headOK = true;
-    for (var i = 0; i < heads.length; i++) {
-      var p = heads[i];
-      if (p === hw || p === hw + "s" || p === hw + "es") continue;
-      if (/^[a-z]+'$/.test(p)) continue;
-      if (/^[a-z]+$/.test(p)) continue;
-      headOK = false;
-      break;
-    }
-    if (!headOK) return false;
-    return /third-person|present participle|simple past|past participle|plural|comparative|superlative|diminutive|feminine|masculine|neuter|genitive|nominative|accusative|dative|ablative|not comparable|UK|US|dialectal|imperative|auxiliary|conjugation|^by$|predicative/i.test(annot);
-  }
-
-  function wiktExtractDefs(headword, body) {
-    var t = stripInlineHeaders(String(body || "").replace(/\s+$/, "").trim());
-    if (!t) return [];
-    var blocks = t.split(/\n\s*\n/);
-
-    if (blocks.length) {
-      var first = blocks[0];
-      var fLines = first.split("\n");
-      if (fLines.length === 1) {
-        var stripped = fLines[0].replace(/[^a-zA-Z\s,]/g, "").trim().toLowerCase();
-        var hw = String(headword || "").trim().toLowerCase();
-        var parts = stripped.split(/[,\s]+/).filter(Boolean);
-        var headMatch = parts.length > 0;
-        for (var i = 0; i < parts.length && headMatch; i++) {
-          var p = parts[i];
-          if (p === hw || p === hw + "s" || p === hw + "es") continue;
-          if (/^[a-z]+'$/.test(p)) continue;
-          if (/^[a-z]+$/.test(p)) continue;
-          headMatch = false;
-        }
-        if (headMatch || wiktIsInflectionLine(first, headword)) blocks.shift();
-      }
-    }
-
-    var skipRE = /^\s*(Synonyms?|Antonyms?|Coordinate terms?|Related terms?|Derived terms?|For more quotations using this term|Usage notes|See also|External links|Trivia|Footnotes|Source|Notes|History|Compare|Quotations|Anagram)/i;
-    var attrStartRE = /^(?:[12]\d{3}|January|February|March|April|May|June|July|August|September|October|November|December|c\.|circa|ca\.)\b/;
-    var onlyLabelRE = /^\([A-Za-z][A-Za-z ,]*\)\s*$/;
-    var numberRangeRE = /^\d+\s*-\s*\d+,\s*\d/;
-
-    var defs = [];
-    function emit(text) {
-      var s = String(text || "").replace(/\s+$/, "").trim();
-      if (!s) return;
-      if (/^\[[^\]]+\]\s*$/.test(s)) return;
-      if (attrStartRE.test(s)) return;
-      if (onlyLabelRE.test(s)) return;
-      if (numberRangeRE.test(s)) return;
-      if (s.length < 8) return;
-      defs.push({ definition: s, example: "", synonyms: [], antonyms: [] });
-    }
-
-    for (var bi = 0; bi < blocks.length; bi++) {
-      var block = blocks[bi].trim();
-      if (!block) continue;
-      if (/^Alternative forms\s+of\s+/i.test(block)) continue;
-      var bLines = block.split("\n");
-      for (var lj = 0; lj < bLines.length; lj++) {
-        var line = bLines[lj].replace(/\s+$/, "").trim();
-        if (!line) continue;
-        if (skipRE.test(line)) continue;
-        if (line.charAt(0) === "*") line = line.substring(1).trim();
-        if (attrStartRE.test(line)) {
-          if (lj + 1 < bLines.length) {
-            var next = bLines[lj + 1].replace(/\s+$/, "").trim();
-            if (next && !skipRE.test(next) && !attrStartRE.test(next) &&
-                !onlyLabelRE.test(next) && next.length >= 12) {
-              emit(line + " — " + next);
-              lj++;
-            }
-          }
-          continue;
-        }
-        emit(line);
-      }
-    }
-    return defs;
-  }
-
-  function parseWiktionaryWikitext(headword, rawText, langCode) {
-    var top = parseSections(rawText);
-    if (!top.length) return null;
-
-    var target = String(langCode || defaultLanguage()).toLowerCase();
-    var targetName = langWikiName(target).toLowerCase();
-    var labelLower = langLabel(target).toLowerCase();
-    var lang = null;
-    for (var i = 0; i < top.length; i++) {
-      var t = top[i];
-      if (t.level !== 2) continue;
-      var titleLower = t.title.toLowerCase();
-      if (titleLower === targetName || titleLower === labelLower) {
-        lang = t;
-        break;
-      }
-    }
-    if (!lang) {
-      for (var fi = 0; fi < top.length; fi++) {
-        if (top[fi].level === 2) { lang = top[fi]; break; }
-      }
-    }
-    if (!lang) return null;
-
-    var loose = target !== "en";
+  function parseNativeWikitext(word, rawText, langCode) {
+    var sections = parseSections(rawText);
+    if (!sections.length) return null;
 
     var meanings = [];
     var phonetic = "";
 
-    function visit(node) {
-      var key = node.title.toLowerCase().trim();
-      var keyBase = key.replace(/\s+\d+$/, "");
-      if (key === "pronunciation") {
-        phonetic = wiktExtractIpa(node.body) || phonetic;
-        return;
+    function walk(sec) {
+      var title = sec.title.toLowerCase();
+      if (!phonetic && /pronunciation|prononciation|aussprache/i.test(title)) {
+        var m = /IPA[^:\n]*:\s*\/([^\n/]+)\//.exec(sec.body);
+        if (m) phonetic = "/" + m[1] + "/";
       }
-      if (key === "etymology" || keyBase === "etymology") {
-        for (var ei = 0; ei < node.children.length; ei++) visit(node.children[ei]);
-        return;
-      }
-      if (WIKT_SKIP_DROP[key]) return;
-      if (WIKT_POS_KEYS[key]) {
-        var defs = wiktExtractDefs(headword, node.body);
+
+      var isPos = POS_PRIORITY[title] !== undefined ||
+                  /noun|verb|adjective|adverb|nom|verbe|adjectif|adverbe/i.test(title);
+
+      if (isPos && sec.body) {
+        var lines = sec.body.split("\n");
+        var defs = [];
+        for (var i = 0; i < lines.length; i++) {
+          var l = lines[i].trim();
+          if (l.startsWith("#") && !l.startsWith("#*") && !l.startsWith("#:")) {
+            var dt = cleanHtml(l.replace(/^#+\s*/, ""));
+            if (dt && dt.length > 2 && !defs.some(function(x) { return x.definition === dt; })) {
+              defs.push({ definition: dt, example: "", synonyms: [], antonyms: [] });
+            }
+          }
+        }
         if (defs.length) {
           meanings.push({
-            partOfSpeech: wiktCanonicalPos(key),
+            partOfSpeech: title,
             definitions: defs,
             synonyms: [],
             antonyms: []
           });
         }
-        return;
       }
-      if (loose && node.level === 3) {
-        var looseDefs = wiktExtractDefs(headword, node.body);
-        if (looseDefs.length && node.title.trim().length > 0 && node.title.trim().length < 30) {
-          meanings.push({
-            partOfSpeech: node.title.trim(),
-            definitions: looseDefs,
-            synonyms: [],
-            antonyms: []
-          });
-          return;
-        }
-      }
-      for (var ci = 0; ci < node.children.length; ci++) visit(node.children[ci]);
+
+      for (var c = 0; c < sec.children.length; c++) walk(sec.children[c]);
     }
 
-    for (var li = 0; li < lang.children.length; li++) visit(lang.children[li]);
+    for (var s = 0; s < sections.length; s++) walk(sections[s]);
 
     if (!meanings.length) return null;
+
     return {
-      word: String(headword || "").trim(),
+      word: word,
       phonetic: phonetic,
       audioUrl: "",
-      source: "wiktionary",
-      language: target,
+      source: "Wiktionary Native",
+      language: langCode,
       meanings: meanings
     };
   }
 
-  // ---- Fuzzy match ----
+  async function lookupNativeWiktionary(word, langCode) {
+    try {
+      var url = apiBase(langCode) + encodeURIComponent(word);
+      var res = await fetchWithTimeout(url, 4000);
+      if (!res.ok) return null;
+      var data = await res.json();
+      if (!data || !data.query || !data.query.pages) return null;
+      var page = Object.values(data.query.pages)[0];
+      if (!page || page.missing !== undefined || !page.extract) return null;
+      return parseNativeWikitext(word, page.extract, langCode);
+    } catch (e) {
+      return null;
+    }
+  }
 
+  // ---- Unified Multi-Tier Lookup ----
+  async function lookup(word, langCode) {
+    var w = String(word || "").trim();
+    if (!w) throw new Error("no word specified");
+    var lang = String(langCode || defaultLanguage()).toLowerCase().trim();
+    var candidates = lookupCandidates(w);
+
+    for (var i = 0; i < candidates.length; i++) {
+      var cand = candidates[i];
+      var entry = null;
+
+      // 1. For English, attempt Free Dictionary API first (best phonetics & audio)
+      if (lang === "en") {
+        entry = await lookupFreeDictionary(cand);
+      }
+
+      // 2. If not found or non-English, try official Wiktionary REST API
+      if (!entry) {
+        entry = await lookupWiktionaryRest(cand, lang);
+      }
+
+      // 3. Enrich missing IPA / audio from Wikimedia Commons metadata
+      if (entry) {
+        entry = await enrichWiktionaryMetadata(entry, cand, lang);
+        return { ok: true, entry: entry };
+      }
+
+      // 4. Fallback for non-English to native Wiktionary edition
+      if (lang !== "en") {
+        entry = await lookupNativeWiktionary(cand, lang);
+        if (entry) {
+          entry = await enrichWiktionaryMetadata(entry, cand, lang);
+          return { ok: true, entry: entry };
+        }
+      }
+    }
+
+    // Not found
+    var notFoundErr = new Error("no entry for \"" + w + "\"");
+    notFoundErr.notFound = true;
+    return { ok: false, kind: "notfound", error: notFoundErr.message };
+  }
+
+  // ---- Audio Pronunciation Player ----
+  function playAudio(url) {
+    if (!url || typeof url !== "string") return false;
+    // Browser environment
+    if (typeof window !== 'undefined') {
+      try {
+        var a = new Audio(url);
+        a.play();
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    // Node.js CLI environment: completely headless spawn
+    try {
+      var cp = require("child_process");
+      var players = [
+        { bin: "mpv", args: ["--no-video", "--vo=null", "--really-quiet", url] },
+        { bin: "ffplay", args: ["-nodisp", "-autoexit", "-loglevel", "quiet", url] }
+      ];
+
+      for (var i = 0; i < players.length; i++) {
+        var p = players[i];
+        try {
+          var child = cp.spawn(p.bin, p.args, {
+            stdio: "ignore",
+            detached: true
+          });
+          child.unref();
+          return true;
+        } catch (err) {}
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  // ---- Levenshtein & Fuzzy Distance ----
   function levenshtein(a, b) {
     if (a === b) return 0;
-    var al = a.length, bl = b.length;
-    if (al === 0) return bl;
-    if (bl === 0) return al;
-    if (al < bl) {
-      var tmp = a; a = b; b = tmp;
-      var tlen = al; al = bl; bl = tlen;
-    }
-    var v0 = []; var v1 = [];
-    for (var i = 0; i <= bl; i++) v0[i] = i;
-    for (var r = 0; r < al; r++) {
-      v1[0] = r + 1;
-      var ai = a.charCodeAt(r);
-      for (var c = 0; c < bl; c++) {
-        var cost = ai === b.charCodeAt(c) ? 0 : 1;
-        var ins = v1[c] + 1;
-        var del = v0[c + 1] + 1;
-        var sub = v0[c] + cost;
-        var m = ins < del ? ins : del;
-        if (sub < m) m = sub;
-        v1[c + 1] = m;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    var row = [];
+    for (var i = 0; i <= b.length; i++) row[i] = i;
+    for (var j = 1; j <= a.length; j++) {
+      var prev = j;
+      for (var k = 1; k <= b.length; k++) {
+        var val = (a.charAt(j - 1) === b.charAt(k - 1)) ? row[k - 1] : Math.min(row[k - 1] + 1, prev + 1, row[k] + 1);
+        row[k - 1] = prev;
+        prev = val;
       }
-      var swap = v0; v0 = v1; v1 = swap;
+      row[b.length] = prev;
     }
-    return v0[bl];
+    return row[b.length];
   }
 
-  var _WORDLIST = [];
-
+  var wordlist = null;
   function setWordlist(list) {
-    if (Array.isArray(list)) _WORDLIST = list;
+    if (Array.isArray(list)) wordlist = list;
   }
 
-  var AUTO_MATCH_MAX_NORMALIZED = 0.22;
-  var ALTERNATIVES_MAX_NORMALIZED = 0.40;
-  var ALTERNATIVES_DISTANCE_LIMIT = 3;
-  var AUTO_MATCH_GAP = 0.08;
-  var ALTERNATIVES_TO_SHOW = 3;
-
-  function fuzzyMatch(rawQuery) {
-    var query = String(rawQuery || "").toLowerCase().trim();
-    var q = "";
-    for (var i = 0; i < query.length; i++) {
-      var ch = query.charCodeAt(i);
-      if ((ch >= 97 && ch <= 122) ||
-          ch === 0xe9 || ch === 0xe8 || ch === 0xea || ch === 0xeb ||
-          ch === 0xe0 || ch === 0xe2 || ch === 0xee || ch === 0xef ||
-          ch === 0xf1) {
-        q += query[i];
-      }
+  function fuzzyMatch(word) {
+    if (!wordlist || !wordlist.length) return { autoMatch: null, alternatives: [] };
+    var target = word.toLowerCase().trim();
+    var scored = [];
+    for (var i = 0; i < wordlist.length; i++) {
+      var w = wordlist[i];
+      var dist = levenshtein(target, w);
+      var maxLen = Math.max(target.length, w.length);
+      var norm = dist / maxLen;
+      if (norm <= 0.45) scored.push({ word: w, score: norm });
     }
-    if (q.length < 2) return { autoMatch: null, alternatives: [] };
+    scored.sort(function(a, b) { return a.score - b.score; });
+    if (!scored.length) return { autoMatch: null, alternatives: [] };
 
-    var qlen = q.length;
-    var results = [];
-    for (var k = 0; k < _WORDLIST.length; k++) {
-      var w = _WORDLIST[k];
-      var wlen = w.length;
-      if (w.charAt(0) !== q.charAt(0)) continue;
-      if (Math.abs(wlen - qlen) > ALTERNATIVES_DISTANCE_LIMIT) continue;
-      var d = levenshtein(q, w);
-      if (d > ALTERNATIVES_DISTANCE_LIMIT) continue;
-      var score = d / Math.max(qlen, wlen);
-      results.push({ word: w, distance: d, score: score });
+    if (scored[0].score <= 0.25 && (scored.length === 1 || (scored[1].score - scored[0].score) >= 0.12)) {
+      return { autoMatch: scored[0].word, alternatives: [] };
     }
-
-    results.sort(function(a, b) {
-      if (a.score !== b.score) return a.score - b.score;
-      if (a.distance !== b.distance) return a.distance - b.distance;
-      var ad = Math.abs(a.word.length - qlen);
-      var bd = Math.abs(b.word.length - qlen);
-      if (ad !== bd) return ad - bd;
-      if (a.word < b.word) return -1;
-      if (a.word > b.word) return 1;
-      return 0;
-    });
-
-    var inBand = [];
-    for (var ri = 0; ri < results.length; ri++) {
-      if (results[ri].score > ALTERNATIVES_MAX_NORMALIZED) break;
-      inBand.push(results[ri]);
-    }
-
-    if (inBand.length === 0) return { autoMatch: null, alternatives: [] };
-
-    var top = inBand[0];
-    var autoOk = top.score <= AUTO_MATCH_MAX_NORMALIZED &&
-                 (inBand.length === 1 ||
-                  (inBand[1].score - top.score) >= AUTO_MATCH_GAP);
-    if (autoOk) return { autoMatch: top.word, alternatives: [] };
 
     var alts = [];
-    for (var n = 0; n < inBand.length && n < ALTERNATIVES_TO_SHOW; n++) {
-      alts.push(inBand[n].word);
-    }
+    for (var n = 0; n < Math.min(5, scored.length); n++) alts.push(scored[n].word);
     return { autoMatch: null, alternatives: alts };
   }
 
-  // ---- Display helpers ----
+  // Suggestion: Datamuse API with offline wordlist fallback
+  async function suggest(word) {
+    var target = String(word || "").toLowerCase().trim();
+    if (!target) return { autoMatch: null, alternatives: [] };
+
+    try {
+      var res = await fetchWithTimeout("https://api.datamuse.com/sug?s=" + encodeURIComponent(target), 1500);
+      if (res.ok) {
+        var data = await res.json();
+        if (Array.isArray(data) && data.length) {
+          var candidates = [];
+          for (var i = 0; i < data.length; i++) {
+            var cw = String(data[i].word || "").toLowerCase().trim();
+            if (cw && !cw.includes(" ") && !candidates.includes(cw)) {
+              candidates.push(cw);
+            }
+          }
+
+          if (candidates.length) {
+            var d0 = levenshtein(target, candidates[0]);
+            if (d0 <= 2 && candidates[0] !== target) {
+              return { autoMatch: candidates[0], alternatives: candidates.slice(1, 5) };
+            }
+            return { autoMatch: null, alternatives: candidates.slice(0, 5) };
+          }
+        }
+      }
+    } catch (e) {
+      /* fallback to offline */
+    }
+
+    return fuzzyMatch(target);
+  }
+
+  // ---- Backward Compatibility Wrappers ----
+  function parseResponse(raw, langCode) {
+    try {
+      var data = JSON.parse(raw);
+      if (data && data.query && data.query.pages) {
+        var page = Object.values(data.query.pages)[0];
+        if (!page || page.missing !== undefined || !page.extract) {
+          return { ok: false, kind: "notfound", error: "not found" };
+        }
+        var entry = parseNativeWikitext(page.title || "word", page.extract, langCode || "en");
+        if (entry) return { ok: true, entry: entry };
+      }
+    } catch (e) {}
+    return { ok: false, kind: "invalid", error: "lookup failed" };
+  }
 
   function summaryLabel(entry) {
     if (!entry || !entry.meanings) return "";
@@ -600,25 +707,33 @@
 
   function sourceLabel(entry) {
     if (!entry || !entry.source) return "";
-    if (entry.source === "wiktionary") return "Wiktionary";
-    if (entry.source === "dictionaryapi") return "Free Dictionary";
     return String(entry.source);
   }
 
-  global.DictEngine = {
+  var engine = {
     LANGUAGES: LANGUAGES,
     languages: languages,
     langLabel: langLabel,
+    langWikiName: langWikiName,
+    defaultLanguage: defaultLanguage,
+    lookupCandidates: lookupCandidates,
     apiBase: apiBase,
     lookupUrl: lookupUrl,
-    lookupCandidates: lookupCandidates,
-    parseResponse: parseResponse,
-    parseWiktionaryWikitext: parseWiktionaryWikitext,
+    lookup: lookup,
+    suggest: suggest,
+    playAudio: playAudio,
+    cleanHtml: cleanHtml,
     levenshtein: levenshtein,
     setWordlist: setWordlist,
     fuzzyMatch: fuzzyMatch,
+    parseResponse: parseResponse,
     summaryLabel: summaryLabel,
-    sourceLabel: sourceLabel,
-    defaultLanguage: defaultLanguage
+    sourceLabel: sourceLabel
   };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = engine;
+  }
+  global.DictEngine = engine;
+
 })(typeof window !== 'undefined' ? window : globalThis);
