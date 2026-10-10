@@ -62,10 +62,10 @@
       border: 'rgba(10, 10, 12, 0.9)'
     },
     'opal': {
-      accent: '#2563EB',
-      accent2: '#7C3AED',
+      accent: '#1D4ED8',
+      accent2: '#6D28D9',
       glow: '#3B82F6',
-      border: 'rgba(28, 42, 74, 0.15)'
+      border: 'rgba(255, 255, 255, 0.4)'
     }
   };
 

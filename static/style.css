@@ -416,43 +416,43 @@ html[data-theme="tungsten"] {
   --cat-light: #F2F5FA;
 }
 
-/* ── opal — Luminous daylight glass. Frosted white surfaces, prismatic sapphire accents, and obsidian ink. ── */
+/* ── opal — Luminous daylight glass. Pure transparent frosted glass over fluid azure wallpaper. ── */
 html[data-theme="opal"] {
   --bg: #EAEFF6;
-  --bg-elev: #F2F6FB;
-  --fg: #111827;
-  --fg-dim: #4B5563;
-  --accent: #2563EB;
-  --accent-2: #7C3AED;
-  --glass: rgba(255, 255, 255, .68);
-  --glass-hi: rgba(255, 255, 255, .95);
-  --line: rgba(255, 255, 255, .40);
-  --line-hi: rgba(37, 99, 235, .50);
-  --sheen: rgba(255, 255, 255, .75);
-  --grid: rgba(255, 255, 255, .15);
-  --glow: rgba(37, 99, 235, .25);
-  --halo-a: rgba(37, 99, 235, .10);
-  --halo-b: rgba(147, 51, 234, .08);
-  --blur: 18px;
-  --sat: 150%;
-  --bg-panel: #FFFFFF;
-  --bg-panel-alt: #EDF2F9;
-  --bg-glow: #DFE7F2;
-  --bg-core: #F8FAFD;
-  --fg-muted: #6B7280;
-  --border: rgba(37, 99, 235, .16);
-  --border-strong: var(--line-hi);
-  --accent-bright: #1D4ED8;
-  --accent-soft: #3B82F6;
-  --accent-dim: #60A5FA;
-  --link: #2563EB;
-  --link-hover: #1D4ED8;
-  --focus-ring: #2563EB;
+  --bg-elev: rgba(255, 255, 255, 0.08);
+  --fg: #0B192C;
+  --fg-dim: #1E3A5F;
+  --accent: #1D4ED8;
+  --accent-2: #6D28D9;
+  --glass: transparent;
+  --glass-hi: rgba(255, 255, 255, 0.65);
+  --line: rgba(255, 255, 255, 0.45);
+  --line-hi: rgba(29, 78, 216, 0.65);
+  --sheen: rgba(255, 255, 255, 0.55);
+  --grid: rgba(255, 255, 255, 0.15);
+  --glow: rgba(29, 78, 216, 0.30);
+  --halo-a: rgba(29, 78, 216, 0.12);
+  --halo-b: rgba(109, 40, 217, 0.10);
+  --blur: 24px;
+  --sat: 165%;
+  --bg-panel: transparent;
+  --bg-panel-alt: rgba(255, 255, 255, 0.12);
+  --bg-glow: transparent;
+  --bg-core: transparent;
+  --fg-muted: #3B5A80;
+  --border: rgba(255, 255, 255, 0.42);
+  --border-strong: rgba(29, 78, 216, 0.60);
+  --accent-bright: #1E40AF;
+  --accent-soft: #2563EB;
+  --accent-dim: #3B82F6;
+  --link: #1D4ED8;
+  --link-hover: #1E40AF;
+  --focus-ring: #1D4ED8;
   --grid-fade: transparent;
-  --grid-line: rgba(255, 255, 255, .16);
-  --grid-dot: rgba(255, 255, 255, .38);
-  --bar-a: #2563EB;
-  --bar-b: #7C3AED;
+  --grid-line: rgba(255, 255, 255, 0.16);
+  --grid-dot: rgba(255, 255, 255, 0.42);
+  --bar-a: #1D4ED8;
+  --bar-b: #6D28D9;
   --bar-c: #0284C7;
   --orange: #D97706;
   --orange-deep: #B45309;
@@ -461,16 +461,17 @@ html[data-theme="opal"] {
   --cyan: #0284C7;
   --cyan-deep: #0369A1;
   --yellow: #D97706;
-  --cat-dark: #1E3A8A;
-  --cat-mid: #3B82F6;
-  --cat-base: #60A5FA;
-  --cat-light: #DBEAFE;
+  --cat-dark: #0F172A;
+  --cat-mid: #1E3A8A;
+  --cat-base: #2563EB;
+  --cat-light: #93C5FD;
 
-  /* Glass tokens: frosted light-mode elevation and soft ambient shadows over wallpaper */
-  --glass-bg: rgba(255, 255, 255, 0.68);
-  --glass-bg-strong: rgba(255, 255, 255, 0.90);
-  --glass-shadow: 0 4px 24px rgba(0, 32, 80, 0.12), 0 1px 3px rgba(0, 32, 80, 0.06);
-  --glass-shadow-hover: 0 8px 36px rgba(0, 32, 80, 0.18), 0 2px 6px rgba(0, 32, 80, 0.08);
+  /* Glass tokens: completely transparent with intense backdrop blur and glass refraction */
+  --glass-bg: transparent;
+  --glass-bg-strong: rgba(255, 255, 255, 0.15);
+  --glass-blur: 24px;
+  --glass-shadow: 0 8px 32px rgba(0, 20, 60, 0.16), 0 1px 3px rgba(0, 20, 60, 0.08);
+  --glass-shadow-hover: 0 12px 42px rgba(0, 20, 60, 0.22), 0 2px 6px rgba(0, 20, 60, 0.10);
 }
 
 /* Opal wallpaper background replacing gradients */
@@ -478,29 +479,35 @@ html[data-theme="opal"] body {
   background: url("/opal-bg.jpg") center top / cover no-repeat fixed;
 }
 
-/* Opal theme refined component polish: soft diffuse glass depth & crisp contrast */
+/* Opal theme refined component polish: fully transparent frosted glass */
 html[data-theme="opal"] nav.top {
-  box-shadow: 0 4px 20px rgba(0, 32, 80, 0.10);
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 20px rgba(0, 20, 60, 0.10);
 }
 html[data-theme="opal"] .ascii-logo {
-  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.9), 0 0 18px rgba(37, 99, 235, 0.22);
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.8), 0 0 18px rgba(29, 78, 216, 0.25);
 }
 html[data-theme="opal"] .section-line {
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+  background: linear-gradient(90deg, var(--accent) 0%, rgba(255, 255, 255, 0.5) 25%, rgba(255, 255, 255, 0.2) 60%, transparent 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 html[data-theme="opal"] .section-heading,
 html[data-theme="opal"] .section-badge {
-  box-shadow: 0 2px 10px rgba(0, 32, 80, 0.08), inset 0 1px 0 var(--glass-hi);
+  background: transparent;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(0, 20, 60, 0.08), inset 0 1px 0 var(--glass-hi);
   text-shadow: none;
 }
 html[data-theme="opal"] .terminal-bar {
-  background: color-mix(in srgb, var(--bg-panel-alt) 85%, transparent);
+  background: rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border);
 }
 html[data-theme="opal"] .terminal-body .prompt {
   text-shadow: none;
 }
 html[data-theme="opal"] .terminal-body h1 {
-  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.8);
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.7);
 }
 html[data-theme="opal"] .site-cat .cat-face {
   background: #0F172A;
@@ -518,10 +525,23 @@ html[data-theme="opal"] .novel-start-btn,
 html[data-theme="opal"] .type-hero-stat,
 html[data-theme="opal"] .compress-btn,
 html[data-theme="opal"] .walldiff-btn {
-  box-shadow: 0 2px 10px rgba(0, 32, 80, 0.08), inset 0 1px 0 var(--glass-hi);
+  background: transparent;
+  box-shadow: 0 2px 10px rgba(0, 20, 60, 0.08), inset 0 1px 0 var(--glass-hi);
+}
+html[data-theme="opal"] .novel-tag,
+html[data-theme="opal"] .chapter-num {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border);
+}
+html[data-theme="opal"] .dict-meaning-lbl {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border);
+}
+html[data-theme="opal"] .dict-meaning-item {
+  border-left: 3px solid var(--accent);
 }
 html[data-theme="opal"] .chapter-body {
-  background: rgba(255, 255, 255, 0.82);
+  background: transparent;
 }
 html[data-theme="opal"] .footer .rule {
   color: rgba(255, 255, 255, 0.85);
