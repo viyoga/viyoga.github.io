@@ -60,6 +60,12 @@
       accent2: '#9FB0C4',
       glow: '#FFFFFF',
       border: 'rgba(10, 10, 12, 0.9)'
+    },
+    'opal': {
+      accent: '#2563EB',
+      accent2: '#7C3AED',
+      glow: '#3B82F6',
+      border: 'rgba(28, 42, 74, 0.15)'
     }
   };
 
