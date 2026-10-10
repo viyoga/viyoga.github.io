@@ -2,7 +2,7 @@
   var html = document.documentElement;
   var btn = document.getElementById('theme-btn');
   if (!btn) return;
-  var VALID = ['amber', 'mallow', 'gruvbox-material', 'safelight', 'tungsten', 'opal'];
+  var VALID = ['amber', 'mallow', 'gruvbox-material', 'safelight', 'tungsten'];
   var DEF = (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) ? 'safelight' : 'amber';
   var current = html.getAttribute('data-theme') || DEF;
   if (current === 'gruvbox' || current === 'slick') current = 'gruvbox-material';
