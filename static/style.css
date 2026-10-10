@@ -3290,12 +3290,14 @@ nav.top .logo:active, .nav-links a:active, .type-action-btn:active,
   content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
   border-radius: inherit;
   background:
-    linear-gradient(120deg, transparent 15%, var(--sheen, color-mix(in srgb, var(--fg) 6%, transparent)) 45%, transparent 65%),
-    radial-gradient(460px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--accent) 7%, transparent) 0%, transparent 80%);
-  opacity: 0; transition: opacity 0.3s ease;
+    linear-gradient(115deg, transparent 20%, var(--sheen, color-mix(in srgb, var(--fg) 7%, transparent)) 42%, transparent 60%),
+    radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%);
+  opacity: 0.5; transition: opacity 0.25s ease, background-position 0.7s ease;
+  background-position: 0% 0%, 0 0;
 }
 .spot:hover::before {
   opacity: 1;
+  background-position: 100% 0%, 0 0;
 }
 
 /* ── Glass fallback: solid surfaces where backdrop-filter is unavailable ── */
