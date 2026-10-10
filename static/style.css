@@ -424,13 +424,13 @@ html[data-theme="opal"] {
   --fg-dim: #4B5563;
   --accent: #2563EB;
   --accent-2: #7C3AED;
-  --glass: rgba(255, 255, 255, .65);
+  --glass: rgba(255, 255, 255, .68);
   --glass-hi: rgba(255, 255, 255, .95);
-  --line: rgba(37, 99, 235, .15);
-  --line-hi: rgba(37, 99, 235, .45);
-  --sheen: rgba(255, 255, 255, .65);
-  --grid: rgba(37, 99, 235, .08);
-  --glow: rgba(37, 99, 235, .22);
+  --line: rgba(255, 255, 255, .40);
+  --line-hi: rgba(37, 99, 235, .50);
+  --sheen: rgba(255, 255, 255, .75);
+  --grid: rgba(255, 255, 255, .15);
+  --glow: rgba(37, 99, 235, .25);
   --halo-a: rgba(37, 99, 235, .10);
   --halo-b: rgba(147, 51, 234, .08);
   --blur: 18px;
@@ -440,7 +440,7 @@ html[data-theme="opal"] {
   --bg-glow: #DFE7F2;
   --bg-core: #F8FAFD;
   --fg-muted: #6B7280;
-  --border: var(--line);
+  --border: rgba(37, 99, 235, .16);
   --border-strong: var(--line-hi);
   --accent-bright: #1D4ED8;
   --accent-soft: #3B82F6;
@@ -448,9 +448,9 @@ html[data-theme="opal"] {
   --link: #2563EB;
   --link-hover: #1D4ED8;
   --focus-ring: #2563EB;
-  --grid-fade: #EAEFF6;
-  --grid-line: rgba(30, 58, 138, .06);
-  --grid-dot: rgba(37, 99, 235, .20);
+  --grid-fade: transparent;
+  --grid-line: rgba(255, 255, 255, .16);
+  --grid-dot: rgba(255, 255, 255, .38);
   --bar-a: #2563EB;
   --bar-b: #7C3AED;
   --bar-c: #0284C7;
@@ -466,22 +466,32 @@ html[data-theme="opal"] {
   --cat-base: #60A5FA;
   --cat-light: #DBEAFE;
 
-  /* Glass tokens: frosted light-mode elevation and soft ambient shadows */
-  --glass-bg: rgba(255, 255, 255, 0.65);
+  /* Glass tokens: frosted light-mode elevation and soft ambient shadows over wallpaper */
+  --glass-bg: rgba(255, 255, 255, 0.68);
   --glass-bg-strong: rgba(255, 255, 255, 0.90);
-  --glass-shadow: 0 4px 20px rgba(28, 42, 74, 0.08), 0 1px 3px rgba(28, 42, 74, 0.04);
-  --glass-shadow-hover: 0 8px 32px rgba(28, 42, 74, 0.13), 0 2px 6px rgba(28, 42, 74, 0.06);
+  --glass-shadow: 0 4px 24px rgba(0, 32, 80, 0.12), 0 1px 3px rgba(0, 32, 80, 0.06);
+  --glass-shadow-hover: 0 8px 36px rgba(0, 32, 80, 0.18), 0 2px 6px rgba(0, 32, 80, 0.08);
+}
+
+/* Opal wallpaper background replacing gradients */
+html[data-theme="opal"] body {
+  background: url("/opal-bg.jpg") center top / cover no-repeat fixed;
 }
 
 /* Opal theme refined component polish: soft diffuse glass depth & crisp contrast */
 html[data-theme="opal"] nav.top {
-  box-shadow: 0 4px 20px rgba(28, 42, 74, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 32, 80, 0.10);
 }
 html[data-theme="opal"] .ascii-logo {
   text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.9), 0 0 18px rgba(37, 99, 235, 0.22);
 }
 html[data-theme="opal"] .section-line {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+html[data-theme="opal"] .section-heading,
+html[data-theme="opal"] .section-badge {
+  box-shadow: 0 2px 10px rgba(0, 32, 80, 0.08), inset 0 1px 0 var(--glass-hi);
+  text-shadow: none;
 }
 html[data-theme="opal"] .terminal-bar {
   background: color-mix(in srgb, var(--bg-panel-alt) 85%, transparent);
@@ -508,7 +518,17 @@ html[data-theme="opal"] .novel-start-btn,
 html[data-theme="opal"] .type-hero-stat,
 html[data-theme="opal"] .compress-btn,
 html[data-theme="opal"] .walldiff-btn {
-  box-shadow: 0 2px 10px rgba(28, 42, 74, 0.07), inset 0 1px 0 var(--glass-hi);
+  box-shadow: 0 2px 10px rgba(0, 32, 80, 0.08), inset 0 1px 0 var(--glass-hi);
+}
+html[data-theme="opal"] .chapter-body {
+  background: rgba(255, 255, 255, 0.82);
+}
+html[data-theme="opal"] .footer .rule {
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 20, 60, 0.5);
+}
+html[data-theme="opal"] .footer .rule:hover {
+  color: #FFFFFF;
 }
 
 /* ── Scrollbar ── */
