@@ -662,6 +662,7 @@ html.grid-live body:has(#grid-canvas)::before { opacity: 0; }
   max-width: 640px;
   width: 100%;
   position: relative;
+  overflow: hidden;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .terminal:hover {
@@ -674,6 +675,8 @@ html.grid-live body:has(#grid-canvas)::before { opacity: 0; }
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 var(--glass-hi);
 }
 .terminal-bar {
+  position: relative;
+  z-index: 1;
   background: color-mix(in srgb, var(--bg-panel-alt) 55%, transparent);
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
@@ -708,6 +711,8 @@ html.grid-live body:has(#grid-canvas)::before { opacity: 0; }
   .live-dot { animation: blink 1s step-end infinite; }
 }
 .terminal-body {
+  position: relative;
+  z-index: 1;
   background: transparent;
   padding: 24px;
   display: flex; flex-direction: column; align-items: center; gap: 12px;
@@ -3298,6 +3303,11 @@ nav.top .logo:active, .nav-links a:active, .type-action-btn:active,
 .spot:hover::before {
   opacity: 1;
   background-position: 100% 0%, 0 0;
+}
+.terminal.spot::before {
+  background:
+    linear-gradient(115deg, transparent 20%, var(--sheen, color-mix(in srgb, var(--fg) 7%, transparent)) 42%, transparent 60%),
+    radial-gradient(580px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--accent) 22%, transparent), transparent 72%);
 }
 
 /* ── Glass fallback: solid surfaces where backdrop-filter is unavailable ── */
